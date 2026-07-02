@@ -1,20 +1,19 @@
-Goonateer Casino - play-money online casino MVP
+Goonateer Casino MVP with Poker
 
-How to run:
-1. Install Node.js from nodejs.org if needed.
-2. Open Terminal.
-3. cd into this folder.
-4. Run: npm install
-5. Run: npm start
-6. Open: http://localhost:3000
+Fake chips only. No real money, no prizes.
 
-Important: Do NOT open public/index.html directly.
+Run locally:
+1. Open Terminal
+2. cd into this folder
+3. npm install
+4. npm start
+5. Open http://localhost:3000
 
-Features:
-- Create room
-- Join with room code
-- Enter your name
-- Sit at a room table
+Includes:
+- Create room / Join room code
 - Max 10 players per room
-- Play-money chips only
-- Blackjack, roulette, slots, chat
+- Texas Hold'em poker
+- Blackjack
+- Roulette
+- Slots
+- Chat
