@@ -1,28 +1,64 @@
-const socket=io();let state=null,me=null,roomCode=null,mode='home';const app=document.getElementById('app');
-function C(c){if(!c)return'';if(c.hidden)return'<div class="card back">◆</div>';let red=c.s==='♥'||c.s==='♦';return `<div class="card ${red?'redcard':''}">${c.r}${c.s}</div>`}
-function chips(){return '<div class="chip-stack"><span class="chip red"></span><span class="chip blue"></span><span class="chip goldchip"></span><span class="chip green"></span></div>'}
-function myPlayer(){return state?.players.find(p=>p.id===socket.id)||state?.players.find(p=>p.name===me)}
-function render(){
- if(mode==='home')return app.innerHTML=`<div class="screen"><div class="cardbox"><h1><span class="gold">Goonateer</span> Casino</h1><p>Fake chips only. Create a room or join your friends.</p><div class="row"><button onclick="mode='create';render()">Create Room</button><button onclick="mode='join';render()">Join Room</button></div></div></div>`;
- if(mode==='create')return app.innerHTML=`<div class="screen"><div class="cardbox"><h1>Create Room</h1><input id="name" placeholder="Your name"><button onclick="createRoom()">Enter Casino</button><br><br><button onclick="mode='home';render()">Back</button></div></div>`;
- if(mode==='join')return app.innerHTML=`<div class="screen"><div class="cardbox"><h1>Join Room</h1><input id="code" placeholder="Room code"><input id="name" placeholder="Your name"><button onclick="joinRoom()">Join</button><br><br><button onclick="mode='home';render()">Back</button></div></div>`;
+const socket=io();let state=null,roomCode=null,meName='',slotLast='';const app=document.getElementById('app');
+function landing(){app.innerHTML=`<div class=screen><div class=card><div class=logo>🎰 Goonateer Casino</div><p class=sub>Play-money social casino. No real money, no prizes, just fake chips.</p><div class=row><button onclick="nameScreen('create')">Create Room</button><button class=secondary onclick="nameScreen('join')">Join With Code</button></div><p class=sub>Max 10 players per room • Poker • Blackjack • Roulette • Slots</p><div id=err class=error></div></div></div>`}
+function nameScreen(mode){app.innerHTML=`<div class=screen><div class=card><div class=logo>${mode==='create'?'Create Room':'Join Room'}</div><div class=row><input id=name placeholder="Your name" maxlength=18>${mode==='join'?'<input id=code placeholder="Room code" maxlength=6>':''}</div><div class=row><button onclick="enter('${mode}')">Sit at Table</button><button class=secondary onclick="landing()">Back</button></div><div id=err class=error></div></div></div>`}
+function enter(mode){meName=document.getElementById('name').value.trim()||'Player'; if(!socket.connected)return err('Server not connected. Run npm start and open localhost:3000'); if(mode==='create')socket.emit('createRoom',meName,res=>{if(!res.ok)return err(res.error);roomCode=res.code}); else socket.emit('joinRoom',{name:meName,code:document.getElementById('code').value},res=>{if(!res.ok)return err(res.error);roomCode=res.code})}
+function err(t){document.getElementById('err').textContent=t}
+socket.on('roomState',s=>{state=s;roomCode=s.code;renderCasino()});
+let selectedGame='lobby';
+function renderCasino(){
  if(!state)return;
- let top=`<div class="topbar"><b>🎰 Goonateer Casino</b><div>Room: <b class="gold">${state.code}</b> • Players: ${state.players.length}/10</div></div>`;
- if(!state.game||mode==='lobby')return app.innerHTML=top+`<div class="casino"><div class="cardbox"><h1>Choose Game</h1><div class="games"><div class="game" onclick="choose('poker')"><b>🃏 Poker</b><p>Community cards, chips, table play</p></div><div class="game" onclick="choose('blackjack')"><b>♠ Blackjack</b><p>One player at a time vs dealer</p></div><div class="game" onclick="choose('slots')"><b>🎰 Slots</b><p>Slot machine room</p></div><div class="game" onclick="choose('roulette')"><b>🎡 Roulette</b><p>Wheel and betting lounge</p></div></div></div></div>`;
- if(state.game==='blackjack')return renderBJ(top);
- if(state.game==='slots')return app.innerHTML=top+`<div class="casino"><div class="slot-room"><h1>Slots</h1><div class="reels"><span>🍒</span><span>💎</span><span>7️⃣</span></div><button>Spin</button></div></div>`;
- if(state.game==='roulette')return app.innerHTML=top+`<div class="casino"><div class="roulette-room"><h1>Roulette</h1><div class="wheel">🎡</div><button>Spin Wheel</button></div></div>`;
- return app.innerHTML=top+`<div class="casino"><div class="placeholder"><div><h1>Poker</h1><p>Poker table loads here.</p></div></div></div>`;
+ const baseTop=`<div class=top><div><b class=big>Goonateer Casino</b><div class=sub>Room code: <b>${state.code}</b> | Players ${state.players.length}/10</div></div><div class=pill>Status: ${socket.connected?'Connected':'Disconnected'}</div></div>`;
+ if(selectedGame==='lobby'){
+  app.innerHTML=`<div class=casino>${baseTop}<div class=card style="margin:24px auto"><div class=logo>Choose Your Game</div><p class=sub>You are in the room. Pick where you want to play.</p><div class=gameSelect><button onclick="selectedGame='poker';renderCasino()">♠️ Poker<br><small>Table game • up to 10 players</small></button><button onclick="selectedGame='blackjack';renderCasino()">🃏 Blackjack<br><small>Dealer table</small></button><button onclick="selectedGame='roulette';renderCasino()">🎡 Roulette<br><small>Casino wheel environment</small></button><button onclick="selectedGame='slots';renderCasino()">🎰 Slots<br><small>Slot machine room</small></button></div><div class=panel><h2>Players in room</h2><div class=row>${state.players.map(p=>`<span class=pill>${esc(p.name)} — 💰 ${p.chips.toLocaleString()}</span>`).join('')}</div></div><div class=panel><h2>💬 Room Chat</h2>${chatBox()}</div></div></div>`;
+  return;
+ }
+ if(selectedGame==='slots'){
+  app.innerHTML=`<div class=casino>${baseTop}${backBtn()}<div class=slotsRoom><div class=slotsMachine><div class=machineTop>GOONATEER SLOTS</div><div class=reels>${slotLast||'🍒 🍋 🔔'}</div><div class=row><input id=slotbet type=number value=500 min=100 max=5000><button onclick="spinSlots()">Pull Lever</button></div><p class=sub>Match 2 symbols = 2x. Match 3 symbols = 10x. Fake chips only.</p></div><div class=panel><h2>Players</h2>${playerList()}</div><div class=panel><h2>💬 Chat</h2>${chatBox()}</div></div></div>`;
+  return;
+ }
+ if(selectedGame==='roulette'){
+  app.innerHTML=`<div class=casino>${baseTop}${backBtn()}<div class=rouletteRoom><div class=wheel>${state.roulette.last?state.roulette.last.n:'?'}</div><div class=rouletteBoard><h1>Roulette Lounge</h1><p>Last spin: <b>${state.roulette.last?state.roulette.last.n+' '+state.roulette.last.color:'none'}</b></p><div class=row><select id=rchoice><option>red</option><option>black</option><option>green</option>${Array.from({length:37},(_,i)=>`<option>${i}</option>`).join('')}</select><input id=rbet type=number value=500 min=100 max=5000><button onclick="rouletteBet()">Place Bet</button><button onclick="socket.emit('rouletteSpin')">Spin Wheel</button></div><p class=sub>Bet red/black/green or a number 0–36.</p></div><div class=panel><h2>Players</h2>${playerList()}</div><div class=panel><h2>💬 Chat</h2>${chatBox()}</div></div></div>`;
+  return;
+ }
+ // Poker and blackjack are table games
+ const isPoker=selectedGame==='poker';
+ const seatedPlayers=state.players.filter(p=>p.id!==null || p.name);
+ app.innerHTML=`<div class=casino>${baseTop}${backBtn()}<div class=table ${isPoker?'pokerFelt':'blackjackFelt'}>
+   <div class=center>
+     <h2>${isPoker?'Poker':'Blackjack'}</h2>
+     ${isPoker?`<div class=community>${cards(state.poker?.community||[])||'<span class=sub>No community cards yet</span>'}</div><div class=pot>POT: 💰 ${((state.poker?.pot||0).toLocaleString())}</div><p>${state.poker?.phase||'not started'} • ${state.poker?.message||'Start a poker hand when everyone is ready.'}</p>`:`<p>Dealer</p><div>${cards(state.blackjack?.dealer||[])}</div>${state.blackjack&&!state.blackjack.active?`<p>Dealer total: ${handTotal(state.blackjack.dealer||[])}</p>`:''}<p>${state.blackjack?.message||'Start a blackjack round.'}</p>`}
+   </div>
+   ${seatedPlayers.map((p,i)=>playerSeat(p,i,seatedPlayers.length,isPoker)).join('')}
+ </div>${isPoker?pokerControls():blackjackControls()}<div class=panel><h2>💬 Chat</h2>${chatBox()}</div></div>`
 }
-function renderBJ(top){const bj=state.blackjack;const players=state.players;const current=bj?.currentTurn;let pos=[[50,73],[22,64],[78,64],[10,42],[90,42],[24,22],[76,22],[50,13],[36,78],[64,78]];let seats=players.map((p,i)=>`<div class="player-seat ${current===i&&bj.phase==='playing'?'active':''}" style="left:${pos[i][0]}%;top:${pos[i][1]}%;transform:translate(-50%,-50%)"><div class="pname">${i+1}. ${p.name}</div><div class="chips">💰 ${p.chips.toLocaleString()}</div>${chips()}<div class="bet-circle">Bet ${p.bet||500}</div><div class="player-hand">${(p.cards||[]).map(C).join('')}</div><div class="status">${p.result||p.status||''} ${p.handValue?`• ${p.handValue}`:''}</div></div>`).join('');let mine=myPlayer();let myTurn=mine&&players[current]?.id===socket.id&&bj.phase==='playing';let controls='';if(bj.phase==='betting')controls=`<div class="controls"><input id="bet" type="number" value="500" min="100"><button onclick="setBet()">Set Bet</button><button onclick="bjStart()">Deal Cards</button></div>`;else if(myTurn)controls=`<div class="controls"><button onclick="hit()">Hit</button><button onclick="stand()">Stand</button><button onclick="doubleDown()" ${mine.cards.length!==2?'disabled':''}>Double</button></div>`;else if(bj.phase==='roundover')controls=`<div class="controls"><button onclick="newRound()">New Round</button></div>`;else controls=`<div class="controls">${bj.message}</div>`;
- return app.innerHTML=top+`<div class="casino"><div class="table-wrap"><div class="bj-table"><div class="dealer"><div class="dealer-avatar">👨‍💼</div><div class="dealer-title">Dealer</div><div class="dealer-hand">${(bj.dealerUp||[]).map(C).join('')}</div><div class="status">${bj.dealerValue?`Value: ${bj.dealerValue}`:''}</div></div><div class="playing-message">Blackjack<br><span class="gold">${bj.message}</span></div>${seats}</div></div>${controls}</div>`}
-function createRoom(){me=document.getElementById('name').value||'Player';socket.emit('createRoom',{name:me},res=>{if(!res.ok)return alert(res.error);roomCode=res.code;mode='lobby';});}
-function joinRoom(){me=document.getElementById('name').value||'Player';roomCode=document.getElementById('code').value.toUpperCase();socket.emit('joinRoom',{code:roomCode,name:me},res=>{if(!res.ok)return alert(res.error);mode='lobby';});}
-function choose(game){socket.emit('chooseGame',{code:state.code,game});}
-function setBet(){socket.emit('bjBet',{code:state.code,amount:+document.getElementById('bet').value});}
-function bjStart(){socket.emit('bjStart',{code:state.code});}
-function hit(){socket.emit('bjHit',{code:state.code});}
-function stand(){socket.emit('bjStand',{code:state.code});}
-function doubleDown(){socket.emit('bjDouble',{code:state.code});}
-function newRound(){socket.emit('bjNewRound',{code:state.code});}
-socket.on('state',s=>{state=s;render()});render();
+function backBtn(){return `<div class=row style="justify-content:flex-start;margin:14px 0"><button class=secondary onclick="selectedGame='lobby';renderCasino()">← Game Lobby</button></div>`}
+function pokerControls(){return `<div class=panel poker><h2>♠️ Poker Controls</h2><div class=row><button onclick="socket.emit('pokerStart')">Start Poker Hand</button><button onclick="pokerAction('call')">Check / Call</button><button onclick="pokerAction('fold')">Fold</button></div><div class=row><input id=praise type=number value=1000 min=100 max=50000><button onclick="pokerRaise()">Raise</button></div></div>`}
+function blackjackControls(){
+ const bj=state.blackjack;
+ const me=state.players.find(p=>p.name===meName);
+ const current=bj?.active ? state.players[bj.turn] : null;
+ const myTurn=!!(bj?.active && current && me && current.id===me.id);
+ if(!bj?.active){
+   return `<div class=panel><h2>🃏 Blackjack</h2><p>Bet: 1,000 chips</p><div class=row><button onclick="socket.emit('bjStart')">Start Round</button></div></div>`;
+ }
+ return `<div class=panel><h2>🃏 Blackjack</h2><p><b>${esc(bj.message||'')}</b></p>${myTurn?`<div class=row><button onclick="socket.emit('bjHit')">Hit</button><button onclick="socket.emit('bjStand')">Stand</button></div>`:`<p class=sub>Waiting for ${esc(current?.name||'player')}...</p>`}</div>`;
+}
+function playerList(){return `<div class=row>${state.players.map(p=>`<span class=pill>${esc(p.name)} — 💰 ${p.chips.toLocaleString()}</span>`).join('')}</div>`}
+function chatBox(){return `<div class=chat>${state.chat.map(c=>`<p><b>${esc(c.name)}:</b> ${esc(c.msg)}</p>`).join('')}</div><div class=row><input id=chat placeholder="message"><button onclick="sendChat()">Send</button></div>`}
+function playerSeat(p,i,total,isPoker){
+ const angle=(-90 + (360/Math.max(total,1))*i) * Math.PI/180;
+ const x=50 + 43*Math.cos(angle), y=50 + 42*Math.sin(angle);
+ const shownCards=isPoker ? (p.pokerHand||[]) : (p.hand||[]);
+ const isTurn=!isPoker && state.blackjack?.active && state.players[state.blackjack.turn]?.id===p.id;
+ return `<div class="seat playerSeat ${isTurn?'activeTurn':''}" style="left:${x}%;top:${y}%">
+   <b>Player ${p.seat}</b><br>${esc(p.name)}<br>
+   <div class=chipStack><span></span><span></span><span></span></div>
+   <div>💰 ${p.chips.toLocaleString()}</div>
+   ${!isPoker&&p.bet?`<div class=betCircle>Bet ${p.bet.toLocaleString()}</div>`:''}
+   <div>${cards(shownCards)}</div><small>${p.status||''}</small>
+ </div>`
+}
+function cards(hand){return (hand||[]).map(c=>c.hidden?`<span class="playing-card back">🂠</span>`:`<span class="playing-card ${['♥','♦'].includes(c.s)?'red':''}">${c.r}${c.s}</span>`).join('')}
+function handTotal(hand){let t=0,aces=0;(hand||[]).forEach(c=>{if(c.hidden)return;if(['J','Q','K'].includes(c.r))t+=10;else if(c.r==='A'){t+=11;aces++;}else t+=Number(c.r)||0});while(t>21&&aces>0){t-=10;aces--;}return t;} 
+function pokerAction(type){socket.emit('pokerAction',{type},res=>{if(res&&!res.ok)alert(res.error||'Poker action failed')})}function pokerRaise(){socket.emit('pokerAction',{type:'raise',amount:document.getElementById('praise').value},res=>{if(res&&!res.ok)alert(res.error||'Raise failed')})}
+function spinSlots(){socket.emit('spinSlots',document.getElementById('slotbet').value,res=>{if(res.ok){slotLast=res.roll.join(' ')+(res.win?' WIN '+res.win:'');renderCasino()}})}function rouletteBet(){socket.emit('rouletteBet',{choice:document.getElementById('rchoice').value,bet:document.getElementById('rbet').value},()=>{})}function sendChat(){let v=document.getElementById('chat').value;socket.emit('chat',v)}function esc(s){return String(s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}landing();
