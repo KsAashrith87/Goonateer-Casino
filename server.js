@@ -4,14 +4,31 @@ const rooms=new Map();
 function code(){let c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('')}
 function makeRoom(name,socket){let r;do{r=code()}while(rooms.has(r));rooms.set(r,{code:r,players:[],chat:[],blackjack:null,poker:null,roulette:{bets:[],spinning:false,last:null},slots:[]});joinRoom(r,name,socket);return r}
 function joinRoom(r,name,socket){const room=rooms.get(r);if(!room)throw Error('Room not found'); if(room.players.length>=10)throw Error('Room full'); let player={id:socket.id,name:name.slice(0,18)||'Player',chips:100000,seat:room.players.length+1,hand:[],bet:0,status:'Lobby'};room.players.push(player);socket.join(r);socket.data.room=r;socket.data.name=name;return player}
-function emitRoom(r){const room=rooms.get(r);if(room)io.to(r).emit('roomState',safe(room))}
-function safe(room){return {...room,players:room.players.map(p=>({...p,hand:p.id? p.hand:[]}))}}
+function emitRoom(r){
+  const room=rooms.get(r); if(!room)return;
+  for(const player of room.players){
+    if(player.id) io.to(player.id).emit('roomState',safe(room,player.id));
+  }
+}
+function hiddenCards(n){return Array.from({length:n},()=>({hidden:true}))}
+function safe(room,viewerId){
+  const pokerOver=room.poker && room.poker.active===false;
+  return {
+    ...room,
+    players:room.players.map(p=>({
+      ...p,
+      // Blackjack cards are visible in this MVP, but poker hole cards are private.
+      pokerHand:(p.id===viewerId || pokerOver) ? (p.pokerHand||[]) : hiddenCards((p.pokerHand||[]).length),
+      hand:p.hand||[]
+    }))
+  }
+}
 const suits=['♠','♥','♦','♣'], ranks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];function deck(){let d=[];for(const s of suits)for(const r of ranks)d.push({r,s});return d.sort(()=>Math.random()-.5)}
 function val(card){if(['J','Q','K'].includes(card.r))return 10;if(card.r==='A')return 11;return +card.r}function total(hand){let t=hand.reduce((a,c)=>a+val(c),0),aces=hand.filter(c=>c.r==='A').length;while(t>21&&aces--){t-=10}return t}
 
 function pokerStart(room){
   let d=deck();
-  room.poker={deck:d,community:[],pot:0,currentBet:0,turn:0,phase:'preflop',active:true,message:'Texas Holdem started'};
+  room.poker={deck:d,community:[],pot:0,currentBet:0,turn:0,phase:'preflop',active:true,message:'Poker hand started'};
   for(const p of room.players){p.pokerHand=[d.pop(),d.pop()];p.pokerBet=0;p.folded=false;p.status='Poker'}
 }
 function pokerNext(room){
